@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEIC to JPEG/PNG Converter</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- heic2any CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar styling for clean aesthetic */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(71, 85, 105, 1);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+
+    <div class="w-full max-w-4xl mx-auto px-4 py-8 flex-1 flex flex-col justify-center">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-medium text-slate-400 mb-4">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Local Browser Conversion (WASM)
+            </div>
+            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-2">
+                HEIC Converter
+            </h1>
+            <p class="text-slate-400 text-sm sm:text-base max-w-md mx-auto">
+                Convert Apple HEIC photos to JPEG or PNG directly in your browser. Fast, private, and 100% client-side.
+            </p>
+        </header>
+
+        <!-- Notification Banner -->
+        <div id="toast" class="hidden mb-6 p-4 rounded-xl border text-sm font-medium transition-all duration-300 flex items-start gap-3 shadow-lg">
+            <svg id="toastIcon" class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
+            <div id="toastMessage" class="flex-1"></div>
+            <button id="toastClose" class="text-slate-400 hover:text-white transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <!-- Main Card -->
+        <main class="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8">
+
+            <!-- Controls Bar -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-6 mb-6 border-b border-slate-800/80">
+                <!-- Target Format Selector -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Target Format</label>
+                    <div class="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-lg border border-slate-800">
+                        <button type="button" id="btnJpg" class="format-btn py-2 px-3 text-xs font-medium rounded-md transition-all bg-brand-600 text-white shadow-sm" data-format="image/jpeg">
+                            JPEG
+                        </button>
+                        <button type="button" id="btnPng" class="format-btn py-2 px-3 text-xs font-medium rounded-md transition-all text-slate-400 hover:text-white" data-format="image/png">
+                            PNG
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quality Control (Active for JPEG) -->
+                <div id="qualityContainer">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="qualitySlider" class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Quality</label>
+                        <span id="qualityVal" class="text-xs font-mono text-brand-500 font-bold">85%</span>
+                    </div>
+                    <div class="h-9 flex items-center">
+                        <input type="range" id="qualitySlider" min="10" max="100" value="85" class="w-full accent-brand-500 bg-slate-950 h-2 rounded-lg cursor-pointer border border-slate-800">
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Dropzone -->
+            <div id="dropzone" class="relative group border-2 border-dashed border-slate-700 hover:border-brand-500/80 bg-slate-950/50 hover:bg-slate-950 rounded-xl p-8 text-center cursor-pointer transition-all duration-200">
+                <input type="file" id="fileInput" accept=".heic,.HEIC,.heif,.HEIF" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+
+                <div class="flex flex-col items-center justify-center space-y-3 pointer-events-none">
+                    <div class="p-3.5 bg-slate-900 border border-slate-800 group-hover:border-brand-500/30 rounded-full text-slate-400 group-hover:text-brand-500 transition-colors shadow-inner">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-200">
+                            Drag & drop your HEIC files here, or <span class="text-brand-500 group-hover:underline">browse</span>
+                        </p>
+                        <p class="text-xs text-slate-500 mt-1">Supports batch processing (.heic, .heif)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Queue & Processed Section -->
+            <div id="queueSection" class="hidden mt-8">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <span>File Queue</span>
+                        <span id="fileCount" class="px-2 py-0.5 text-xs bg-slate-800 text-slate-400 rounded-full font-mono">0</span>
+                    </h3>
+                    <div class="flex gap-2">
+                        <button id="btnClear" class="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-800 transition-all">
+                            Clear All
+                        </button>
+                        <button id="btnDownloadAll" class="hidden text-xs bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg font-medium shadow-sm transition-all flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            Download All
+                        </button>
+                    </div>
+                </div>
+
+                <!-- File Items List -->
+                <div id="fileList" class="space-y-3 max-h-96 overflow-y-auto pr-1"></div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="py-6 text-center text-xs text-slate-600 border-t border-slate-900">
+        <p>Ultra Minimalist HEIC Converter • Powered by <code class="text-slate-500">heic2any</code> WASM</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // State
+            let queue = []; // Array of { id, file, status: 'pending'|'converting'|'done'|'error', resultBlob, resultUrl, error }
+            let selectedFormat = 'image/jpeg';
+            let quality = 0.85;
+
+            // DOM Elements
+            const dropzone = document.getElementById('dropzone');
+            const fileInput = document.getElementById('fileInput');
+            const btnJpg = document.getElementById('btnJpg');
+            const btnPng = document.getElementById('btnPng');
+            const qualityContainer = document.getElementById('qualityContainer');
+            const qualitySlider = document.getElementById('qualitySlider');
+            const qualityVal = document.getElementById('qualityVal');
+            const queueSection = document.getElementById('queueSection');
+            const fileList = document.getElementById('fileList');
+            const fileCount = document.getElementById('fileCount');
+            const btnClear = document.getElementById('btnClear');
+            const btnDownloadAll = document.getElementById('btnDownloadAll');
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const toastIcon = document.getElementById('toastIcon');
+            const toastClose = document.getElementById('toastClose');
+
+            // Format Selection
+            const setFormat = (fmt) => {
+                selectedFormat = fmt;
+                if (fmt === 'image/jpeg') {
+                    btnJpg.className = 'format-btn py-2 px-3 text-xs font-medium rounded-md transition-all bg-brand-600 text-white shadow-sm';
+                    btnPng.className = 'format-btn py-2 px-3 text-xs font-medium rounded-md transition-all text-slate-400 hover:text-white';
+                    qualityContainer.classList.remove('opacity-40', 'pointer-events-none');
+                } else {
+                    btnPng.className = 'format-btn py-2 px-3 text-xs font-medium rounded-md transition-all bg-brand-600 text-white shadow-sm';
+                    btnJpg.className = 'format-btn py-2 px-3 text-xs font-medium rounded-md transition-all text-slate-400 hover:text-white';
+                    qualityContainer.classList.add('opacity-40', 'pointer-events-none');
+                }
+            };
+
+            btnJpg.addEventListener('click', () => setFormat('image/jpeg'));
+            btnPng.addEventListener('click', () => setFormat('image/png'));
+
+            // Quality Slider
+            qualitySlider.addEventListener('input', (e) => {
+                const val = e.target.value;
+                qualityVal.textContent = `${val}%`;
+                quality = parseInt(val, 10) / 100;
+            });
+
+            // Drag and Drop Effects
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('border-brand-500', 'bg-brand-500/5');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('border-brand-500', 'bg-brand-500/5');
+                });
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                const files = Array.from(e.dataTransfer.files);
+                handleFiles(files);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files);
+                handleFiles(files);
+                fileInput.value = ''; // Reset input
+            });
+
+            // File Queue Handler
+            const handleFiles = (files) => {
+                const heicFiles = files.filter(f => {
+                    const ext = f.name.split('.').pop().toLowerCase();
+                    return ext === 'heic' || ext === 'heif' || f.type.includes('heic') || f.type.includes('heif');
+                });
+
+                if (heicFiles.length === 0) {
+                    showToast('Please select valid HEIC or HEIF image files.', 'error');
+                    return;
+                }
+
+                hideToast();
+
+                heicFiles.forEach(file => {
+                    const item = {
+                        id: Math.random().toString(36).substring(2, 9),
+                        file: file,
+                        status: 'pending',
+                        resultBlob: null,
+                        resultUrl: null,
+                        error: null
+                    };
+                    queue.push(item);
+                });
+
+                renderQueue();
+                processNextInQueue();
+            };
+
+            // Process Queue sequentially
+            const processNextInQueue = async () => {
+                const pendingItem = queue.find(i => i.status === 'pending');
+                if (!pendingItem) {
+                    updateDownloadAllButton();
+                    return;
+                }
+
+                pendingItem.status = 'converting';
+                renderQueue();
+
+                try {
+                    // Call heic2any WASM engine
+                    const conversionResult = await heic2any({
+                        blob: pendingItem.file,
+                        toType: selectedFormat,
+                        quality: selectedFormat === 'image/jpeg' ? quality : undefined
+                    });
+
+                    // heic2any can return an array if HEIC has multiple frames/images
+                    const finalBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+
+                    pendingItem.status = 'done';
+                    pendingItem.resultBlob = finalBlob;
+                    pendingItem.resultUrl = URL.createObjectURL(finalBlob);
+
+                } catch (err) {
+                    console.error('HEIC Conversion Error:', err);
+                    pendingItem.status = 'error';
+                    pendingItem.error = err.message || 'Failed to parse HEIC image.';
+                }
+
+                renderQueue();
+                processNextInQueue(); // Process next item recursively
+            };
+
+            // Render Queue UI
+            const renderQueue = () => {
+                if (queue.length === 0) {
+                    queueSection.classList.add('hidden');
+                    return;
+                }
+
+                queueSection.classList.remove('hidden');
+                fileCount.textContent = queue.length;
+                fileList.innerHTML = '';
+
+                queue.forEach(item => {
+                    const ext = selectedFormat === 'image/jpeg' ? 'jpg' : 'png';
+                    const targetName = item.file.name.replace(/\.(heic|heif)$/i, `.${ext}`);
+                    const origSize = formatBytes(item.file.size);
+
+                    const el = document.createElement('div');
+                    el.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all';
+
+                    let statusMarkup = '';
+
+                    if (item.status === 'pending') {
+                        statusMarkup = `
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-900 text-slate-400 border border-slate-800">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                                Queued
+                            </span>`;
+                    } else if (item.status === 'converting') {
+                        statusMarkup = `
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                                <svg class="w-3.5 h-3.5 animate-spin text-brand-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                Converting...
+                            </span>`;
+                    } else if (item.status === 'done') {
+                        const newSize = formatBytes(item.resultBlob.size);
+                        statusMarkup = `
+                            <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                                <div class="text-right hidden sm:block">
+                                    <div class="text-xs font-mono text-slate-300">${newSize}</div>
+                                    <div class="text-[10px] text-slate-500">Converted</div>
+                                </div>
+                                <a href="${item.resultUrl}" download="${targetName}" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-100 px-3 py-1.5 rounded-lg border border-slate-700 font-medium transition-colors flex items-center gap-1.5">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                    Save
+                                </a>
+                            </div>`;
+                    } else if (item.status === 'error') {
+                        statusMarkup = `
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20" title="${item.error}">
+                                Error converting
+                            </span>`;
+                    }
+
+                    el.innerHTML = `
+                        <div class="flex items-center gap-3 min-w-0 w-full sm:w-auto">
+                            <div class="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 shrink-0 flex items-center justify-center text-slate-400 font-mono text-xs font-bold">
+                                HEIC
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs sm:text-sm font-medium text-slate-200 truncate">${item.file.name}</p>
+                                <p class="text-[11px] text-slate-500 font-mono">${origSize}</p>
+                            </div>
+                        </div>
+                        <div class="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-2 border-t sm:border-0 border-slate-900 pt-2 sm:pt-0">
+                            ${statusMarkup}
+                            <button data-remove="${item.id}" class="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-900 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                        </div>
+                    `;
+
+                    // Remove Listener
+                    el.querySelector(`[data-remove="${item.id}"]`).addEventListener('click', () => {
+                        removeItem(item.id);
+                    });
+
+                    fileList.appendChild(el);
+                });
+
+                updateDownloadAllButton();
+            };
+
+            const removeItem = (id) => {
+                const idx = queue.findIndex(i => i.id === id);
+                if (idx !== -1) {
+                    if (queue[idx].resultUrl) {
+                        URL.revokeObjectURL(queue[idx].resultUrl);
+                    }
+                    queue.splice(idx, 1);
+                    renderQueue();
+                }
+            };
+
+            btnClear.addEventListener('click', () => {
+                queue.forEach(item => {
+                    if (item.resultUrl) URL.revokeObjectURL(item.resultUrl);
+                });
+                queue = [];
+                renderQueue();
+            });
+
+            const updateDownloadAllButton = () => {
+                const doneItems = queue.filter(i => i.status === 'done');
+                if (doneItems.length > 1) {
+                    btnDownloadAll.classList.remove('hidden');
+                } else {
+                    btnDownloadAll.classList.add('hidden');
+                }
+            };
+
+            btnDownloadAll.addEventListener('click', () => {
+                const doneItems = queue.filter(i => i.status === 'done');
+                doneItems.forEach((item, index) => {
+                    setTimeout(() => {
+                        const ext = selectedFormat === 'image/jpeg' ? 'jpg' : 'png';
+                        const targetName = item.file.name.replace(/\.(heic|heif)$/i, `.${ext}`);
+                        const a = document.createElement('a');
+                        a.href = item.resultUrl;
+                        a.download = targetName;
+                        a.click();
+                    }, index * 200); // Stagger downloads slightly to prevent browser blocking
+                });
+            });
+
+            // Notifications
+            const showToast = (msg, type = 'info') => {
+                toastMessage.textContent = msg;
+                toast.classList.remove('hidden', 'bg-red-500/10', 'border-red-500/20', 'text-red-300', 'bg-slate-900', 'border-slate-800', 'text-slate-300');
+
+                if (type === 'error') {
+                    toast.classList.add('bg-red-500/10', 'border-red-500/20', 'text-red-300');
+                    toastIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>`;
+                } else {
+                    toast.classList.add('bg-slate-900', 'border-slate-800', 'text-slate-300');
+                    toastIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>`;
+                }
+            };
+
+            const hideToast = () => {
+                toast.classList.add('hidden');
+            };
+
+            toastClose.addEventListener('click', hideToast);
+
+            // Helper: Format File Sizes
+            function formatBytes(bytes, decimals = 1) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            }
+        });
+    </script>
+</body>
+</html>
